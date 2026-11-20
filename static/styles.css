@@ -69,6 +69,12 @@ p { margin: 0 0 10px; }
 .nav a:hover { color: var(--text); }
 @media (max-width: 480px) { .nav { gap: 0; } .nav a { padding: 12px 6px 9px; font-size: 13px; } }
 @media (max-width: 380px) { .nav a { padding: 12px 4px 9px; font-size: 12.5px; } }
+@media (max-width: 680px) {
+  .top-in { gap: 0; }
+  .brand { padding: 8px 0 0; }
+  .nav { flex: 1 1 100%; min-width: 0; }
+  .nav a { flex: 0 0 auto; }
+}
 .nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 main { max-width: 1180px; width: 100%; margin: 0 auto; padding: 22px 16px 48px; flex: 1; }
 .foot { border-top: 1px solid var(--border); padding: 16px; color: var(--text-muted); font-size: 12px; text-align: center; }
@@ -81,38 +87,92 @@ main { max-width: 1180px; width: 100%; margin: 0 auto; padding: 22px 16px 48px; 
 .notice { border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--surface); padding: 10px 12px; border-radius: var(--radius); margin: 12px 0; }
 .empty { padding: 40px 0; text-align: center; color: var(--text-muted); }
 
-/* day strip */
-.days { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 18px; scroll-snap-type: x proximity; }
+/* NBA schedule */
+.schedule-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px;
+  margin-bottom: 14px; padding: clamp(18px, 4vw, 30px); border-radius: 12px;
+  background: #172437; color: #fff;
+  background-image: linear-gradient(115deg, #182338 25%, #293c52);
+}
+.schedule-head h1 { font-size: clamp(25px, 4vw, 40px); }
+.schedule-league { color: #ffc38f; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.schedule-zone { color: #d7e0ea; margin: 6px 0 0; }
+.schedule-counts { margin: 9px 0 0; font-weight: 600; }
+.schedule-projections {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 11px;
+  border: 1px solid #8295aa; border-radius: 6px; text-decoration: none; white-space: nowrap;
+}
+.schedule-projections:hover { background: #364a60; }
+.schedule-projections:focus-visible { outline-color: #ffc38f; }
+.schedule-nav {
+  margin-bottom: 18px; padding: 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.schedule-toolbar {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+}
+.schedule-toolbar label, .schedule-actions { display: flex; align-items: center; gap: 7px; }
+.schedule-toolbar label { color: var(--text-muted); font-size: 13px; }
+.schedule-toolbar input, .schedule-actions button {
+  min-height: 40px; padding: 6px 9px; font: inherit; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px;
+}
+.schedule-actions button { cursor: pointer; font-weight: 600; }
+.schedule-actions button:hover:not(:disabled) { background: var(--fill); }
+.schedule-actions button:disabled { color: var(--text-muted); border-color: var(--border); cursor: default; }
+@media (prefers-color-scheme: dark) { .schedule-toolbar input { color-scheme: dark; } }
+.days {
+  position: relative; display: flex; gap: 6px; overflow-x: auto; margin: 10px -1px 0; padding: 4px 2px;
+  scroll-snap-type: x proximity; scrollbar-width: thin;
+}
 .days button {
-  flex: 0 0 auto; min-width: 66px; padding: 6px 8px; background: var(--surface); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius); font: inherit; cursor: pointer; text-align: center; scroll-snap-align: center;
+  flex: 1 0 74px; padding: 6px 7px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; font: inherit; cursor: pointer; text-align: center; scroll-snap-align: center;
 }
 .days button:hover { border-color: var(--border-strong); }
-.days button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
-.days button[aria-pressed="true"] .muted { color: inherit; opacity: 0.75; }
-.days .dow { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.days button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.days button[aria-pressed="true"] .muted { color: inherit; }
+.days .dow { display: block; font-size: 11px; font-weight: 600; }
 .days .dnum { display: block; font-weight: 600; font-size: 15px; }
 .days .today-mark { color: var(--accent); }
 .days button[aria-pressed="true"] .today-mark { color: inherit; }
 
 /* game cards */
-.games { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
-.game { display: block; text-decoration: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; height: 100%; }
-.game:hover { border-color: var(--border-strong); }
-.game-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.games { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); }
+.game {
+  display: block; text-decoration: none; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 13px 14px; height: 100%; box-shadow: 0 2px 5px rgba(20, 24, 30, 0.05);
+}
+.game:hover, .game:focus-visible { border-color: var(--accent); }
+.game-top { display: flex; align-items: baseline; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
 .game-top .when { color: var(--text); font-weight: 600; }
+.game-clock { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; }
+.game-note { margin-left: auto; text-align: end; }
+.game-status { border-radius: 4px; padding: 1px 5px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: var(--fill); color: var(--text); }
+.game-status.live { color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
 .sides { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.sides th:first-child { width: auto; }
-.sides th { width: 64px; }
-.sides th { font-weight: 400; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); text-align: right; padding: 0 0 2px 10px; }
-.sides td { padding: 4px 0; vertical-align: middle; }
-.sides td.n { text-align: right; padding-left: 10px; font-size: 18px; font-weight: 600; width: 64px; }
-.sides td.n.dim { font-weight: 400; color: var(--text-muted); }
+.sides thead th { width: 62px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); text-align: right; }
+.sides thead th:first-child { width: auto; }
+.sides tbody th, .sides td { padding: 4px 0; vertical-align: middle; }
+.sides tbody th { text-align: left; font-weight: 400; }
+.sides td.n { text-align: right; padding-left: 5px; font-size: 18px; font-weight: 600; }
+.sides td.actual-score { font-size: 21px; }
+.sides td.n.dim { font-size: 15px; font-weight: 400; color: var(--text-muted); }
 .sides tr.fav .tname { font-weight: 700; }
 .team { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .team img, .logo { width: 28px; height: 28px; object-fit: contain; flex: 0 0 auto; }
 .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec { color: var(--text-muted); font-size: 12px; margin-left: 2px; white-space: nowrap; flex: 0 0 auto; }
+.game .team-info { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; padding-right: 5px; }
+.game .tname { white-space: normal; line-height: 1.25; overflow-wrap: anywhere; }
+.game .rec { margin-left: 0; }
+.team-mark {
+  position: relative; flex: 0 0 30px; height: 30px; display: grid; place-items: center;
+  background: var(--fill); color: var(--text); border-radius: 6px; font-size: 9px; font-weight: 700;
+}
+.team-mark img { position: absolute; width: 24px; height: 24px; opacity: 0; }
+.team-mark img.loaded { opacity: 1; }
+.team-mark:has(img.loaded) > span { visibility: hidden; }
 .prob { margin-top: 8px; }
 .bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--fill); }
 .bar i { display: block; height: 100%; background: var(--border-strong); }
@@ -123,6 +183,15 @@ main { max-width: 1180px; width: 100%; margin: 0 auto; padding: 22px 16px 48px; 
 .lines { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12.5px; }
 .lines dt { color: var(--text-muted); }
 .lines dd { margin: 0; }
+#home-charts:not(:empty) { margin-top: 24px; gap: 14px; }
+#home-charts > section { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); min-width: 0; }
+@media (max-width: 440px) {
+  .schedule-toolbar label { justify-content: space-between; width: 100%; }
+  .schedule-actions { width: 100%; }
+  .schedule-actions button { flex: 1; padding-inline: 5px; }
+  .game { padding-inline: 11px; }
+  .sides thead th { width: 56px; }
+}
 
 /* summary band */
 .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin: 14px 0; }

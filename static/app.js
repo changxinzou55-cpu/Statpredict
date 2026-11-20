@@ -84,10 +84,10 @@ function hrefToApi(href) {
   if (path) prefetch(path);
 }, { passive: true }));
 
-const dayFmt = (day, opts) => new Date(day + 'T12:00:00Z').toLocaleDateString(undefined, { timeZone: 'UTC', ...opts });
-const timeFmt = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+const dayFmt = (day, opts) => new Date(day + 'T12:00:00Z').toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
 const dateTimeFmt = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const localTipoff = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
 
 // ---------- probability helpers (same formulas as the server) ----------
 function pmf(mean, variance, kmax) {
@@ -138,14 +138,17 @@ function marketLine(g) {
 
 function gameCard(g) {
   const p = g.pred, done = g.completed, live = g.state === 'in';
+  const hasScore = done || live;
   const favHome = p ? p.p_home >= 0.5 : null;
+  const leader = g.score && g.score.away !== g.score.home ? (g.score.home > g.score.away ? 'home' : 'away') : null;
   const row = (side) => {
     const t = g[side], isFav = favHome != null && (side === 'home') === favHome;
     const sc = g.score ? g.score[side] : null;
-    return `<tr class="${isFav ? 'fav' : ''}">
-      <td><div class="team">${logo(t)}<span class="tname">${esc(t.name)}</span><span class="rec">${esc(t.record || '')}</span></div></td>
-      <td class="n">${p ? f1(p[side + '_pts']) : '–'}</td>
-      ${done || live ? `<td class="n dim">${sc ?? '–'}</td>` : ''}
+    return `<tr class="${(hasScore ? leader === side : isFav) ? 'fav' : ''}">
+      <th scope="row"><div class="team"><span class="team-mark" aria-hidden="true"><span>${esc(t.abbr)}</span>${logo(t, 24)}</span>
+        <span class="team-info"><span class="tname">${esc(t.name)}</span>${t.record ? `<span class="rec">${esc(t.record)}</span>` : ''}</span></div></th>
+      ${hasScore ? `<td class="n actual-score">${sc ?? '–'}</td>` : ''}
+      <td class="n ${hasScore ? 'dim' : ''}">${p ? f1(p[side + '_pts']) : '–'}</td>
     </tr>`;
   };
   let verdict = '';
@@ -155,18 +158,29 @@ function gameCard(g) {
   }
   const top = g.top ? ['away', 'home'].flatMap((s) => g.top[s].slice(0, 1).map((x) => `${esc(x.name)} ${f1(x.pts)}`)).join(' · ') : '';
   const mk = marketLine(g);
+  const tipoff = g.date && new Date(g.date);
+  const when = done ? '<span class="game-status final">Final</span>'
+    : live ? `<span class="game-status live">Live</span>${g.status ? `<span>${esc(g.status)}</span>` : ''}`
+    : tipoff && !Number.isNaN(tipoff.getTime())
+      ? `<time class="when" datetime="${esc(g.date)}">${localTipoff.format(tipoff)}</time>`
+      : '<span class="when">Tip-off time TBD</span>';
   return `<li><a class="game" href="#/nba/game/${g.id}">
-    <div class="game-top"><span class="when">${done ? 'Final' : live ? esc(g.status) : timeFmt(g.date)}</span><span>${verdict || esc(g.venue || '')}</span></div>
-    <table class="sides"><thead><tr><th></th><th>Predicted</th>${done || live ? '<th>Actual</th>' : ''}</tr></thead>
+    <div class="game-top"><div class="game-clock">${when}</div><span class="game-note">${verdict || esc(g.venue || '')}</span></div>
+    <table class="sides"><thead><tr><th scope="col"><span class="skip">Team</span></th>${hasScore ? '<th scope="col">Score</th>' : ''}<th scope="col">Predicted</th></tr></thead>
       <tbody>${row('away')}${row('home')}</tbody></table>
     ${p ? probBar(p.p_home, g.away.abbr, g.home.abbr) : '<p class="muted small">No prediction for this game.</p>'}
-    <dl class="lines">
+    ${p || mk || top ? `<dl class="lines">
       ${p ? `<dt>Model</dt><dd>${esc(p.margin >= 0 ? g.home.abbr : g.away.abbr)} by ${f1(Math.abs(p.margin))}, total ${f1(p.total)}</dd>` : ''}
       ${mk ? `<dt>Betting line</dt><dd>${mk}</dd>` : ''}
       ${top ? `<dt>Top scorers</dt><dd>${top}</dd>` : ''}
-    </dl>
+    </dl>` : ''}
   </a></li>`;
 }
+
+// Keep the abbreviation visible until a team logo has loaded successfully.
+main.addEventListener('load', (e) => {
+  if (e.target.matches('.team-mark img')) e.target.classList.add('loaded');
+}, true);
 
 // ---------- sortable tables ----------
 function sortable(table, rows, render, initial) {
@@ -198,43 +212,77 @@ function sortable(table, rows, render, initial) {
 }
 
 // ---------- NBA: games ----------
-async function viewGames(q) {
+async function viewGames(q, token) {
   const want = q.get('day');
   const data = await api(want ? 'nba/day?day=' + encodeURIComponent(want) : 'nba/day');
-  const meta = data, day = data.day;
-  const games = data.games;
-  const upcoming = games.filter((g) => !g.completed);
-  const done = games.filter((g) => g.completed && g.pred && g.score);
-  const hits = done.filter((g) => (g.pred.p_home >= 0.5) === (g.score.home > g.score.away)).length;
-  const sub = !games.length ? 'No games on this date.'
-    : upcoming.length ? `${games.length} game${games.length > 1 ? 's' : ''}. Tip-off times are in your local time.`
-    : `${games.length} game${games.length > 1 ? 's' : ''} played. The model picked ${hits} of ${done.length} winners.`;
+  if (token !== navToken) return;
+  const { day, days, games, today } = data;
+  const live = games.filter((g) => !g.completed && g.state === 'in').length;
+  const final = games.filter((g) => g.completed).length;
+  const evaluated = games.filter((g) => g.completed && g.pred && g.score);
+  const hits = evaluated.filter((g) => (g.pred.p_home >= 0.5) === (g.score.home > g.score.away)).length;
+  const upcoming = games.length - final - live;
+  const counts = [
+    live && `${live} live`,
+    upcoming && `${upcoming} upcoming`,
+    final && `${final} final`,
+    evaluated.length && `${hits}/${evaluated.length} winners correct`,
+  ].filter(Boolean).join(' · ');
+  const index = days.findIndex((d) => d.day >= day);
+  const nearest = index < 0 ? days.length : index;
+  const selected = days[nearest]?.day === day;
+  const previous = days[nearest - 1];
+  const next = days[nearest + Number(selected)];
+  const start = Math.max(0, Math.min(nearest - 3, days.length - 7));
+  const visibleDays = days.slice(start, start + 7);
+  const active = document.activeElement;
+  const restoreFocus = active?.closest('.schedule-nav') ? active.id || 'selected' : '';
   main.innerHTML = `
-    <div class="head"><div><h1>${dayFmt(day, { weekday: 'long', month: 'long', day: 'numeric' })}</h1><p class="muted">${sub}</p></div>
-      <a href="#/nba/players?day=${day}">Player projections for this date</a></div>
-    <div class="days" role="group" aria-label="Game dates (US Eastern)">${meta.days.map((d) => `
+    <header class="schedule-head"><div>
+      <p class="schedule-league">NBA schedule</p>
+      <h1><time datetime="${day}">${dayFmt(day, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</time></h1>
+      <p class="schedule-zone">Schedule dates are in Eastern Time. Tip-off times are local.</p>
+      <p class="schedule-counts">${counts || 'No games scheduled'}</p>
+    </div><a href="#/nba/players?day=${day}" class="schedule-projections">Player projections <span aria-hidden="true">↗</span></a></header>
+    <section class="schedule-nav" aria-label="NBA schedule navigation">
+      <div class="schedule-toolbar">
+        <div class="schedule-actions">
+          <button type="button" id="previous-day" ${previous ? `data-day="${previous.day}"` : 'disabled'} aria-label="Previous game day">‹ <span>Previous</span></button>
+          <button type="button" id="current-day" data-day="${today}" aria-label="Today in Eastern Time" ${today === day ? 'disabled' : ''}>Today (ET)</button>
+          <button type="button" id="next-day" ${next ? `data-day="${next.day}"` : 'disabled'} aria-label="Next game day"><span>Next</span> ›</button>
+        </div>
+        <label for="schedule-date">Jump to date <input type="date" id="schedule-date" value="${day}"></label>
+      </div>
+      ${visibleDays.length ? `<div class="days" role="group" aria-label="Game dates in Eastern Time">${visibleDays.map((d) => `
       <button type="button" data-day="${d.day}" aria-pressed="${d.day === day}" title="${d.games} games">
-        <span class="dow ${d.day === meta.today ? 'today-mark' : 'muted'}">${d.day === meta.today ? 'Today' : dayFmt(d.day, { weekday: 'short' })}</span>
+        <span class="dow ${d.day === today ? 'today-mark' : 'muted'}">${d.day === today ? 'Today (ET)' : dayFmt(d.day, { weekday: 'short' })}</span>
         <span class="dnum">${dayFmt(d.day, { month: 'short', day: 'numeric' })}</span>
-      </button>`).join('')}</div>
-    ${games.length ? `<ul class="games">${games.map(gameCard).join('')}</ul>` : '<p class="empty">No games on this date. Pick another day above.</p>'}
-    <div class="cols" id="home-charts" style="margin-top:28px"></div>`;
-  const token = navToken;
+      </button>`).join('')}</div>` : ''}
+    </section>
+    ${games.length ? `<ul class="games">${games.map(gameCard).join('')}</ul>` : '<p class="empty">No games on this date. Choose another date to see its matchups.</p>'}
+    <div class="cols" id="home-charts"></div>`;
   Promise.all([api('nba/playoffs').catch(() => null), api('nba/accuracy').catch(() => null)]).then(([po, acc]) => {
     const box = $('#home-charts');
     if (token !== navToken || !box) return;
     box.innerHTML = (po ? `<section><h2 style="margin-top:0">Who wins the title?</h2>${titleBars(po.teams, 6)}<p style="margin-top:8px"><a href="#/nba/playoffs">Playoff picture, bracket and all 30 teams</a></p></section>` : '')
       + (acc && acc.players && acc.players.length ? `<section><h2 style="margin-top:0">Top scorers: predicted against actual</h2>${scorerBars(acc.players, 6)}<p style="margin-top:8px"><a href="#/nba/accuracy">All players and prediction accuracy</a></p></section>` : '');
   });
-  const strip = $('.days');
-  strip.addEventListener('click', (e) => {
+  const nav = $('.schedule-nav', main);
+  const go = (target) => {
+    if (target && target !== day) location.hash = '#/nba/games?day=' + target;
+  };
+  nav.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-day]');
-    if (b) location.hash = '#/nba/games?day=' + b.dataset.day;
+    if (b) go(b.dataset.day);
   });
-  const cur = $('button[aria-pressed="true"]', strip);
-  if (cur) strip.scrollLeft = cur.offsetLeft - strip.clientWidth / 2 + cur.clientWidth / 2;
-  const i = meta.days.findIndex((d) => d.day === day);
-  [meta.days[i + 1], meta.days[i - 1]].forEach((d) => d && prefetch('nba/day?day=' + d.day));
+  $('#schedule-date', nav).addEventListener('change', (e) => go(e.target.value));
+  const strip = $('.days', nav);
+  const cur = strip && $('button[aria-pressed="true"]', strip);
+  if (cur) strip.scrollLeft = cur.offsetLeft - (strip.clientWidth - cur.offsetWidth) / 2;
+  if (restoreFocus) {
+    const target = restoreFocus === 'selected' ? cur : document.getElementById(restoreFocus);
+    (target && !target.disabled ? target : cur || $('#schedule-date', nav)).focus({ preventScroll: true });
+  }
 }
 
 // ---------- NBA: game detail ----------
@@ -269,8 +317,9 @@ function boxTable(team, lines, done) {
     </tbody></table></div>`;
 }
 
-async function viewGame(id) {
+async function viewGame(id, token) {
   const g = await api('nba/game/' + id);
+  if (token !== navToken) return;
   const p = g.pred, d = g.detail, done = g.completed;
   const favHome = p && p.p_home >= 0.5;
   const fav = p ? (favHome ? g.home : g.away) : null;
@@ -315,9 +364,10 @@ async function viewGame(id) {
 }
 
 // ---------- NBA: players (daily projections + search) ----------
-async function viewPlayers(q) {
+async function viewPlayers(q, token) {
   const want = q.get('day');
   const [meta, idx] = await Promise.all([api(want ? 'nba/day?day=' + encodeURIComponent(want) : 'nba/day'), api('nba/players')]);
+  if (token !== navToken) return;
   const day = meta.day;
   const data = { players: [] };
   meta.games.forEach((g) => {
@@ -467,8 +517,9 @@ function shotChart(sh) {
   </div>`;
 }
 
-async function viewPlayer(id) {
+async function viewPlayer(id, token) {
   const p = await api('nba/player/' + id);
+  if (token !== navToken) return;
   const a = p.averages, nx = p.next, line = nx && nx.line;
   const bits = [p.team && p.team.name, p.pos, p.jersey && '#' + p.jersey, p.height, p.age && p.age + ' yrs'].filter(Boolean).map(esc).join(' · ');
   const avgRow = (label, r) => (r ? `<tr><th scope="row">${label}</th><td>${r.gp}</td><td>${f1(r.min)}</td>${STATS.map((k) => `<td>${f1(r[k])}</td>`).join('')}</tr>` : '');
@@ -554,8 +605,9 @@ async function viewPlayer(id) {
 }
 
 // ---------- NBA: teams ----------
-async function viewTeams() {
+async function viewTeams(token) {
   const d = await api('nba/teams');
+  if (token !== navToken) return;
   const rows = d.teams.map((t) => ({ ...t, _sort: { name: t.name, w: t.w / Math.max(t.w + t.l, 1), net: t.net, off: t.off, def: t.def, ppg: t.ppg, apts: -t.allowed[0], areb: -t.allowed[1], aast: -t.allowed[2], a3: -t.allowed[3] } }));
   const rel = (v) => { const x = (v - 1) * 100; return `<span class="${x > 2 ? 'bad' : x < -2 ? 'good' : ''}">${x > 0 ? '+' : ''}${x.toFixed(1)}%</span>`; };
   main.innerHTML = `
@@ -571,8 +623,9 @@ async function viewTeams() {
 }
 
 // ---------- NBA: awards ----------
-async function viewAwards() {
+async function viewAwards(token) {
   const d = await api('nba/awards');
+  if (token !== navToken) return;
   const yr = (s) => `${s - 1}-${String(s).slice(2)}`;
   const COLS = {
     mvp: [['PTS', 'pts'], ['REB', 'reb'], ['AST', 'ast']],
@@ -633,8 +686,9 @@ function accuracyBlock(s, label) {
     </div>`;
 }
 
-async function viewAccuracy() {
+async function viewAccuracy(token) {
   const d = await api('nba/accuracy');
+  if (token !== navToken) return;
   const yr = (s) => `${s - 1}-${String(s).slice(2)}`;
   const lk = d.locked;
   main.innerHTML = `
@@ -695,8 +749,9 @@ function scorerBars(players, n) {
 }
 
 // ---------- NBA: playoffs ----------
-async function viewPlayoffs() {
+async function viewPlayoffs(token) {
   const d = await api('nba/playoffs');
+  if (token !== navToken) return;
   const yr = (s) => `${s - 1}-${String(s).slice(2)}`;
   const byTitle = [...d.teams].sort((a, b) => b.title - a.title);
   const fav = byTitle[0], br = d.bracket, bc = br.champion;
@@ -759,9 +814,10 @@ function fxRow(m) {
     <span class="r">${right}</span></a></li>`;
 }
 
-async function viewFootball(q) {
+async function viewFootball(q, token) {
   const lg = q.get('league') || 'eng.1';
   const [list, d] = await Promise.all([api('football/leagues'), api('football/league/' + lg)]);
+  if (token !== navToken) return;
   const a = d.accuracy;
   main.innerHTML = `
     <div class="head"><div><h1>Football</h1><p class="muted">Match odds and likely scorers for Europe's top five leagues. Kick-off times are in your local time.</p></div></div>
@@ -788,8 +844,9 @@ async function viewFootball(q) {
   });
 }
 
-async function viewMatch(id) {
+async function viewMatch(id, token) {
   const m = await api('football/match/' + id);
+  if (token !== navToken) return;
   const p = m.pred, sc = m.score;
   const side = (s) => {
     const t = m[s], r = t.row;
@@ -828,16 +885,16 @@ async function viewMatch(id) {
 
 // ---------- router ----------
 const routes = [
-  [/^\/nba\/games$/, (m, q) => viewGames(q), 'games', 'Games'],
-  [/^\/nba\/game\/(\w+)$/, (m) => viewGame(m[1]), 'games', 'Game'],
-  [/^\/nba\/players$/, (m, q) => viewPlayers(q), 'players', 'Player projections'],
-  [/^\/nba\/player\/(\w+)$/, (m) => viewPlayer(m[1]), 'players', 'Player'],
-  [/^\/nba\/teams$/, () => viewTeams(), 'teams', 'Team ratings'],
-  [/^\/nba\/playoffs$/, () => viewPlayoffs(), 'playoffs', 'Playoffs'],
-  [/^\/nba\/awards$/, () => viewAwards(), 'awards', 'Awards'],
-  [/^\/nba\/accuracy$/, () => viewAccuracy(), 'accuracy', 'Accuracy'],
-  [/^\/football$/, (m, q) => viewFootball(q), 'football', 'Football'],
-  [/^\/football\/match\/(\w+)$/, (m) => viewMatch(m[1]), 'football', 'Match'],
+  [/^\/nba\/games$/, (m, q, token) => viewGames(q, token), 'games', 'Games'],
+  [/^\/nba\/game\/(\w+)$/, (m, q, token) => viewGame(m[1], token), 'games', 'Game'],
+  [/^\/nba\/players$/, (m, q, token) => viewPlayers(q, token), 'players', 'Player projections'],
+  [/^\/nba\/player\/(\w+)$/, (m, q, token) => viewPlayer(m[1], token), 'players', 'Player'],
+  [/^\/nba\/teams$/, (m, q, token) => viewTeams(token), 'teams', 'Team ratings'],
+  [/^\/nba\/playoffs$/, (m, q, token) => viewPlayoffs(token), 'playoffs', 'Playoffs'],
+  [/^\/nba\/awards$/, (m, q, token) => viewAwards(token), 'awards', 'Awards'],
+  [/^\/nba\/accuracy$/, (m, q, token) => viewAccuracy(token), 'accuracy', 'Accuracy'],
+  [/^\/football$/, (m, q, token) => viewFootball(q, token), 'football', 'Football'],
+  [/^\/football\/match\/(\w+)$/, (m, q, token) => viewMatch(m[1], token), 'football', 'Match'],
 ];
 let navToken = 0, retryTimer = null;
 
@@ -857,7 +914,7 @@ async function route(quiet) {
   currentPaths = [hrefToApi('#' + raw) || (path === '/nba/games' ? 'nba/day' : '')];
   if (path === '/nba/games' && !q.get('day')) currentPaths = ['nba/day'];
   try {
-    await hit[1](hit[0].exec(path), q);
+    await hit[1](hit[0].exec(path), q, token);
     if (token !== navToken) return;
     const h1 = $('h1', main);
     document.title = (h1 ? h1.textContent : hit[3]) + ' · StatPredict';
@@ -872,6 +929,7 @@ async function route(quiet) {
         else if (s.building) extra = ` Scoring past games: ${s.progress} done.`;
         if (s.error) extra += ' ' + s.error;
       } catch { /* status is optional */ }
+      if (token !== navToken) return;
       main.innerHTML = `<p class="empty">Loading game data from ESPN. The first load takes a few minutes.${esc(extra)}</p>`;
       retryTimer = setTimeout(route, 4000);
     } else {
@@ -925,9 +983,11 @@ function tick() {
 if (BOOT.session_url) $('#session-link').href = BOOT.session_url;
 else $('#session-link').parentElement.hidden = true;
 stamp(BOOT.refreshed_at);
-// Warm the other tabs once the first page is up, so switching is instant.
-setTimeout(() => ['nba/players', 'nba/teams', 'nba/playoffs', 'nba/awards', 'nba/accuracy', 'football/leagues', 'football/league/eng.1'].forEach(prefetch), 600);
-
+$('a.skip')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  window.scrollTo(0, 0);
+  main.focus({ preventScroll: true });
+});
 window.addEventListener('hashchange', () => route());
 route();
 // Coming back to the tab (or back online) checks at once instead of waiting for the next tick.
