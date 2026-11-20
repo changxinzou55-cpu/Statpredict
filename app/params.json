@@ -1,0 +1,68 @@
+{
+ "tuned_on": 2026,
+ "h_rates": [
+  12.0,
+  25,
+  12.0,
+  15,
+  25,
+  40,
+  15
+ ],
+ "h_min": 8,
+ "prior_mult": 0.4,
+ "prior_mult_min": 0.1,
+ "kappa": 20,
+ "beta": 1.0,
+ "gamma": 0.0,
+ "k_opp": 10,
+ "k_team": 6.0,
+ "blend": 0.3,
+ "rating_prev_w": 0.2,
+ "rating_ridge": 2,
+ "sigma_margin": 12.5,
+ "match_score": true,
+ "decomp": 1.0,
+ "decomp3": 0.5,
+ "pct_k": [
+  60.0,
+  150.0,
+  40.0
+ ],
+ "pct_prior": 0.7,
+ "blow_k": 0.0,
+ "b2b_min": 0.05,
+ "rest_pen": 2.0,
+ "rating_half": 240,
+ "playoff_total": 0.977,
+ "w_mkt_margin": 0.8,
+ "w_mkt_total": 0.8,
+ "star_hold": 1.0,
+ "home_adj": [
+  1.0081,
+  1.002,
+  1.0129,
+  1.0139,
+  0.9963,
+  1.03,
+  0.993
+ ],
+ "var_phi": [
+  3.567,
+  1.54,
+  1.426,
+  1.307,
+  1.245,
+  1.188,
+  1.166
+ ],
+ "var_c": [
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0,
+  0.0
+ ]
+}

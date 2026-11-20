@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: statpredict
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/status
