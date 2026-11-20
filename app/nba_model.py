@@ -536,6 +536,14 @@ def backtest(data: NBAData, P: Params, seasons, skip_ids=(), progress=None):
     return out
 
 
+def favorite_probability_band(p_home: float) -> str:
+    # The model stores probabilities to three decimals. Use integers so exact
+    # 60%, 70% and 80% forecasts land at the bottom of the next band.
+    home = round(p_home * 1000)
+    lower = 50 + 10 * min((max(home, 1000 - home) - 500) // 100, 4)
+    return f"{lower}-{lower + 10}%"
+
+
 def summarize(data: NBAData, P: Params, preds: dict) -> dict:
     """Accuracy figures from walk-forward (or locked) predictions."""
     n_stat = 0
@@ -574,7 +582,7 @@ def summarize(data: NBAData, P: Params, preds: dict) -> dict:
         sq_margin += (p["margin"] - (hs - as_)) ** 2
         t_err += abs(p["total"] - (hs + as_))
         conf = max(p["p_home"], 1 - p["p_home"])
-        b = min(int((conf - 0.5) / 0.1), 4)
+        b = favorite_probability_band(p["p_home"])
         buckets[b][0] += 1
         buckets[b][1] += pick_home == home_won
         buckets[b][2] += conf
@@ -632,7 +640,7 @@ def summarize(data: NBAData, P: Params, preds: dict) -> dict:
             "in_range": round(in_range[i] / n_stat, 3),
         } for i in range(NS)],
         "calibration": [{
-            "bucket": f"{50 + 10 * b}-{60 + 10 * b}%", "games": v[0],
+            "bucket": b, "games": v[0],
             "predicted": round(v[2] / v[0], 3), "actual": round(v[1] / v[0], 3),
         } for b, v in sorted(buckets.items())],
     }

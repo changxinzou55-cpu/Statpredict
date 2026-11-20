@@ -666,6 +666,7 @@ function accuracyBlock(s, label) {
   return `
     <div class="band">
       <div><div class="k">Winners picked</div><div class="v">${pct(w.model, 1)}</div><div class="s">${s.games} games${s.stats_only ? `; stats model alone ${pct(s.stats_only.winner, 1)}` : ''}</div></div>
+      <div><div class="k">Win-probability error</div><div class="v">${w.brier?.toFixed(4) ?? '–'}</div><div class="s">Brier score · lower is better</div></div>
       <div><div class="k">Betting favourite</div><div class="v">${pct(w.market, 1)}</div><div class="s">${w.market_games} games with a line</div></div>
       <div><div class="k">Better record</div><div class="v">${pct(w.record, 1)}</div><div class="s">simple rule</div></div>
       <div><div class="k">Always home team</div><div class="v">${pct(w.home, 1)}</div><div class="s">simple rule</div></div>
@@ -716,7 +717,7 @@ async function viewAccuracy(token) {
         <li><b>Minutes first.</b> Each player's expected minutes come from recent games (the last few count most), how often he has actually played lately, and the injury report. Players ruled out are removed and their minutes go to team-mates.</li>
         <li><b>Production per minute.</b> Points, rebounds, assists and the rest are measured per minute, weighted toward recent games, with last season as a starting point early in the year.</li>
         <li><b>Opponent and venue.</b> Lines move up or down by how much the opposing defence allows in each stat, and slightly for home or away.</li>
-        <li><b>Game score.</b> Team strength (offence and defence, adjusted for schedule and rest) is blended with the sum of the player projections. ${d.line_weight ? `When a betting line exists, the final score leans ${Math.round(d.line_weight * 100)}% on it, because checking past predictions against real scores showed the line beats the stats model; "stats model alone" above is the figure without it.` : ''}</li>
+        <li><b>Game score.</b> Team strength (offence and defence, adjusted for schedule and rest) is blended with the sum of the player projections. ${d.line_weight ? `When a market spread is available, it supplies ${Math.round(d.line_weight * 100)}% of the projected margin. The projected total is blended separately. "Stats model alone" shows performance without market data.` : ''}</li>
         <li><b>Shooting.</b> Points and threes are built from how many shots a player takes (which is steady) and how well he shoots them (pulled toward his long-run and the league rate, because hot and cold streaks mostly fade).</li>
         <li><b>Ranges.</b> Each projection comes with a range that should hold about 8 games in 10. Single games swing a lot; the range is the honest part of the answer.</li>
       </ul>

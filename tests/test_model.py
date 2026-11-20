@@ -73,6 +73,13 @@ def test_home_spread_parsing():
     assert nba_ingest._home_line(None, "PHI", "TOR") is None
 
 
+def test_calibration_bands_include_exact_boundaries_in_the_higher_band():
+    for p, expected in ((0.5, "50-60%"), (0.599, "50-60%"), (0.6, "60-70%"),
+                        (0.7, "70-80%"), (0.8, "80-90%"), (0.9, "90-100%"), (1, "90-100%")):
+        assert M.favorite_probability_band(p) == expected
+        assert M.favorite_probability_band(1 - p) == expected
+
+
 def test_football_probabilities_are_consistent():
     ms = []
     for i in range(60):
