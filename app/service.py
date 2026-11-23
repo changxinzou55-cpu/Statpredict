@@ -201,10 +201,17 @@ class NBAState:
         self.zone_avg = {z: round(v[0] / v[1], 4) if v[1] else None for z, v in tot.items()}
         db.set_meta("nba_zone_avg", {"n": n, "zones": self.zone_avg})
 
-    def shots(self, pid: str) -> dict:
-        rows = db.conn().execute(
-            "SELECT s.x, s.y, s.made, s.value, g.day FROM nba_shots s JOIN nba_games g ON g.id=s.game_id "
-            "WHERE s.player_id=? AND g.season=? ORDER BY g.date", (pid, self.season)).fetchall()
+    def shots(self, pid: str, season: int) -> dict:
+        c = db.conn()
+        rows = c.execute(
+            "SELECT s.x, s.y, s.made, s.value, s.game_id FROM nba_shots s JOIN nba_games g ON g.id=s.game_id "
+            "WHERE s.player_id=? AND g.season=? ORDER BY g.date", (pid, season)).fetchall()
+        totals = c.execute(
+            "SELECT COALESCE(SUM(p.fgm), 0), COALESCE(SUM(p.fga), 0), "
+            "COALESCE(SUM(p.fg3m), 0), COALESCE(SUM(p.fg3a), 0) "
+            "FROM nba_player_games p JOIN nba_games g ON g.id=p.game_id "
+            "WHERE p.player_id=? AND p.played=1 AND g.season=?", (pid, season)).fetchone()
+        fgm, fga, fg3m, fg3a = map(int, totals)
         zones = {z: [0, 0] for z in ZONES}
         pts = []
         for r in rows:
@@ -214,11 +221,13 @@ class NBAState:
             pts.append([r["x"], r["y"], r["made"], r["value"]])
         total = len(pts)
         return {
-            "shots": pts, "games": len({r["day"] for r in rows}),
+            "shots": pts, "games": len({r["game_id"] for r in rows}), "season": season,
+            "box_score": {"all": [fgm, fga], "2": [fgm - fg3m, fga - fg3a], "3": [fg3m, fg3a]},
             "zones": [{"zone": z, "label": ZONES[z], "made": v[0], "att": v[1],
                        "pct": round(v[0] / v[1], 3) if v[1] else None,
                        "share": round(v[1] / total, 3) if total else 0,
-                       "league": self.zone_avg.get(z), "value": 3 if z in ("corner3", "above3") else 2}
+                       "league": self.zone_avg.get(z) if season == self.season else None,
+                       "value": 3 if z in ("corner3", "above3") else 2}
                       for z, v in zones.items()],
         }
 

@@ -273,18 +273,23 @@ def nba_player(pid: str):
     prev = [r for r in hist if r.season == S.season - 1]
     played = [r for r in cur if r.played]
     proj_by_game = {gid: line for gid, line in S.by_player.get(pid, [])}
-    log_rows = []
-    for r in reversed(hist[-45:]):
+
+    def log_row(r):
         g = S.data.games[r.gid]
         line = proj_by_game.get(r.gid)
-        log_rows.append({
+        return {
             "game_id": r.gid, "day": r.day, "season": r.season, "opp": (S.teams.get(r.opp) or {}).get("abbr"),
             "home": r.home, "played": r.played, "starter": r.starter, "min": r.min,
             "stats": dict(zip(M.STATS, r.v)),
             "won": (g["home_score"] > g["away_score"]) == r.home if g["home_score"] is not None else None,
             "proj": None if not line or line["min"] < 1 else {s: round(line["proj"][i], 1) for i, s in enumerate(M.STATS)},
             "proj_min": line["min"] if line else None,
-        })
+        }
+
+    log_rows = [log_row(r) for r in reversed(hist[-45:])]
+    played_history = [r for r in hist if r.played]
+    profile_season = played_history[-1].season if played_history else S.season
+    profile_games = [r for r in played_history if r.season == profile_season]
     compare = []
     for r in cur:
         if not r.played:
@@ -331,7 +336,10 @@ def nba_player(pid: str):
             "previous": _avg([r for r in prev if S.data.games[r.gid]["stype"] == 2]),
             "playoffs": _avg([r for r in prev if S.data.games[r.gid]["stype"] == 3]),
         },
-        "next": nxt, "log": log_rows, "shooting": S.shots(pid), "compare": compare,
+        "next": nxt, "log": log_rows, "compare": compare,
+        "trend": {"season": profile_season, "average": _avg(profile_games),
+                  "games": [log_row(r) for r in reversed(profile_games[-20:])]},
+        "shooting": S.shots(pid, profile_season),
     }
 
 

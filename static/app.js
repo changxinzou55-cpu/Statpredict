@@ -421,28 +421,44 @@ async function viewPlayers(q, token) {
 }
 
 // ---------- NBA: player detail ----------
-function historyChart(log, stat, seasonAvg) {
-  const games = log.filter((r) => r.played).slice(0, 20).reverse();
-  if (!games.length) return '<p class="muted">No games played yet.</p>';
-  const W = 720, H = 220, L = 30, B = 34, T = 14;
-  const max = Math.max(4, ...games.map((r) => Math.max(r.stats[stat], r.proj ? r.proj[stat] : 0))) * 1.12;
-  const bw = (W - L - 8) / games.length;
-  const y = (v) => T + (H - T - B) * (1 - v / max);
-  const step = max > 40 ? 10 : max > 16 ? 5 : max > 8 ? 2 : 1;
-  let grid = '';
-  for (let v = 0; v <= max; v += step) grid += `<line class="grid" x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 5}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
-  const bars = games.map((r, i) => {
-    const x = L + 4 + i * bw, v = r.stats[stat], w = Math.max(bw - 6, 3);
-    const pr = r.proj ? `<line class="proj" x1="${x - 1}" x2="${x + w + 1}" y1="${y(r.proj[stat])}" y2="${y(r.proj[stat])}"/>` : '';
-    return `<g><title>${shortDate(r.day + 'T12:00:00Z')} ${r.home ? 'vs' : '@'} ${r.opp}: ${v}${r.proj ? `, projected ${r.proj[stat]}` : ''}</title>
-      <rect class="bar-r ${r.won ? 'win' : ''}" x="${x}" y="${y(v)}" width="${w}" height="${Math.max(y(0) - y(v), 0)}"/>${pr}
-      <text class="val" x="${x + w / 2}" y="${Math.min(y(v), r.proj ? y(r.proj[stat]) : H) - 4}" text-anchor="middle">${v}</text>
-      <text x="${x + w / 2}" y="${H - B + 13}" text-anchor="middle">${esc(r.opp || '')}</text>
-      <text x="${x + w / 2}" y="${H - B + 25}" text-anchor="middle">${new Date(r.day + 'T12:00:00Z').toLocaleDateString(undefined, { timeZone: 'UTC', month: 'numeric', day: 'numeric' })}</text></g>`;
+function historyChart(log, stat, seasonAvg, count) {
+  const games = log.filter((r) => r.played && Number.isFinite(r.stats[stat])).slice(0, count).reverse();
+  if (!games.length) return '<p class="muted">No completed games with this statistic.</p>';
+  const narrow = window.innerWidth < 560;
+  const W = narrow ? 360 : 760, H = 232, L = 31, R = 18, T = 16, B = 30;
+  const peak = Math.max(4, seasonAvg ?? 0, ...games.map((r) => Math.max(r.stats[stat], r.proj?.[stat] ?? 0)));
+  const step = peak >= 40 ? 10 : peak >= 15 ? 5 : peak >= 6 ? 2 : 1;
+  const max = Math.ceil((peak + step / 2) / step) * step;
+  const x = (i) => games.length === 1 ? (W + L - R) / 2 : L + i * (W - L - R) / (games.length - 1);
+  const y = (value) => T + (H - T - B) * (1 - value / max);
+  const every = Math.max(1, Math.ceil((games.length - 1) / (narrow ? 4 : 7)));
+  const gameLabel = (r) => `${dayFmt(r.day, { month: 'short', day: 'numeric' })} ${r.home ? 'vs' : 'at'} ${r.opp || 'opponent'}`;
+  const grid = Array.from({ length: max / step + 1 }, (_, i) => {
+    const v = i * step;
+    return `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`;
   }).join('');
-  const avg = seasonAvg != null ? `<line class="avg" x1="${L}" x2="${W}" y1="${y(seasonAvg)}" y2="${y(seasonAvg)}"/>` : '';
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${LONG[stat]} in the last ${games.length} games, with the pre-game projection for each">${grid}${bars}${avg}</svg>
-    <div class="legend"><span><i class="b"></i>Actual (darker = team won)</span><span><i></i>Projected before the game</span><span><i class="a"></i>Season average</span></div>`;
+  const series = games.map((r, i) => `${x(i)},${y(r.stats[stat])}`).join(' ');
+  const points = games.map((r, i) => {
+    const value = r.stats[stat], projected = r.proj?.[stat], cx = x(i);
+    const caption = `${gameLabel(r)}, ${value} ${LONG[stat].toLowerCase()}${projected == null ? '' : `, projected ${f1(projected)}`}`;
+    const date = dayFmt(r.day, { month: 'numeric', day: 'numeric' });
+    const showDate = i === 0 || i === games.length - 1 || (i % every === 0 && i < games.length - 2);
+    return `<g>
+      ${projected == null ? '' : `<line class="history-projection" x1="${cx - 4}" x2="${cx + 4}" y1="${y(projected)}" y2="${y(projected)}"/>`}
+      <a href="#/nba/game/${esc(r.game_id)}" aria-label="${esc(caption)}"><title>${esc(caption)}</title>
+        <circle class="history-hit" cx="${cx}" cy="${y(value)}" r="9"/><circle class="history-point" cx="${cx}" cy="${y(value)}" r="3.5"/></a>
+      ${showDate ? `<text x="${cx}" y="${H - 7}" text-anchor="middle">${date}</text>` : ''}</g>`;
+  }).join('');
+  const latest = games[games.length - 1];
+  const average = games.reduce((sum, r) => sum + r.stats[stat], 0) / games.length;
+  return `<div class="history-summary"><div><strong>${f1(average)} ${LABEL[stat]}</strong><span class="muted"> per game over ${games.length} ${games.length === 1 ? 'game' : 'games'}</span></div>
+    <span class="muted">Latest · ${esc(gameLabel(latest))} · <b>${latest.stats[stat]} ${LABEL[stat]}</b></span></div>
+    <svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${LONG[stat]} by game">${grid}
+      ${seasonAvg == null ? '' : `<line class="avg" x1="${L}" x2="${W - R}" y1="${y(seasonAvg)}" y2="${y(seasonAvg)}"/>`}
+      ${games.length > 1 ? `<polyline class="history-line" points="${series}"/>` : ''}${points}</svg>
+    <div class="legend"><span><i></i>Actual</span>
+      ${games.some((r) => r.proj?.[stat] != null) ? '<span><i class="history-projection-key"></i>Pre-game projection</span>' : ''}
+      ${seasonAvg == null ? '' : `<span><i class="a"></i>Season average · ${f1(seasonAvg)}</span>`}</div>`;
 }
 
 // Whole season: what was projected before each game against what the player did, with the likely range.
@@ -486,34 +502,49 @@ function compareBlock(rows, stat) {
     <p class="muted small" style="margin-top:8px">${rows.some((r) => r.locked) ? 'Games where a prediction was frozen before tip-off use that one. The others' : 'Predictions'} are rebuilt from earlier games only, knowing who was in uniform.</p>`;
 }
 
-function shotChart(sh) {
-  if (!sh || !sh.shots.length) return '<p class="muted">No shots recorded this season.</p>';
-  // Court in feet: x 0-50 across, hoop at (25, 0), baseline 5.25 ft behind it. Drawn with the hoop at the top.
-  const X = (x) => x * 10, Y = (y) => (Math.min(y, 33) + 5.25) * 10;
+function shotChart(sh, value) {
+  if (!sh) return '<p class="muted">No shooting data available.</p>';
+  const shots = sh.shots.filter((s) => !value || s[3] === value);
+  const zones = sh.zones.filter((z) => !value || z.value === value);
+  const mappedMade = shots.reduce((sum, shot) => sum + shot[2], 0);
+  const box = sh.box_score?.[value || 'all'];
+  const useBox = box && box[1] > 0;
+  const [made, attempted] = useBox ? box : [mappedMade, shots.length];
+  const summary = attempted
+    ? `<p><strong>${pct(made / attempted, 1)}</strong> · ${made} made on ${attempted} attempts${useBox ? '' : ' with recorded locations'}</p>`
+    : '';
+  if (!shots.length) return `${summary}<p class="muted">${attempted ? 'Shot locations are unavailable for these attempts.' : 'No attempts recorded for this selection.'}</p>`;
+
+  // ESPN coordinates are in feet with the hoop at (25, 0) and the baseline at y = -5.25.
+  const X = (x) => x * 10, Y = (y) => (y + 5.25) * 10;
   const arcY = Math.sqrt(23.75 ** 2 - 22 ** 2);
-  const court = `<rect class="ln" x="0" y="0" width="500" height="390"/>
+  const court = `<rect class="ln" x="0" y="0" width="500" height="470"/>
     <rect class="ln" x="170" y="0" width="160" height="190"/>
     <path class="ln" d="M190 190 A60 60 0 0 0 310 190"/>
     <path class="ln" d="M30 0 V${Y(arcY)} A237.5 237.5 0 0 0 470 ${Y(arcY)} V0"/>
     <path class="ln" d="M210 ${Y(0)} A40 40 0 0 0 290 ${Y(0)}"/>
     <line class="ln" x1="220" x2="280" y1="40" y2="40"/><circle class="ln" cx="250" cy="${Y(0)}" r="7.5"/>`;
-  const dots = sh.shots.map(([x, y, made]) => (made
-    ? `<circle class="mk" cx="${X(x)}" cy="${Y(y)}" r="4.2"/>`
-    : `<path class="ms" d="M${X(x) - 3.4} ${Y(y) - 3.4}l6.8 6.8m0-6.8l-6.8 6.8"/>`)).join('');
-  const made = sh.shots.filter((x) => x[2]).length;
-  const rows = sh.zones.map((z) => {
+  const visible = shots.filter(([x, y]) => x >= 0 && x <= 50 && y >= -5.25 && y <= 41.75);
+  const dots = visible.sort((a, b) => a[2] - b[2]).map(([x, y, m]) => m
+    ? `<circle class="mk" cx="${X(x)}" cy="${Y(y)}" r="4"/>`
+    : `<path class="ms" d="M${X(x) - 3.4} ${Y(y) - 3.4}l6.8 6.8m0-6.8l-6.8 6.8"/>`).join('');
+  const hasLeague = zones.some((z) => z.league != null);
+  const rows = zones.map((z) => {
     const diff = z.pct != null && z.league != null && z.att >= 8 ? z.pct - z.league : null;
-    return `<tr><th scope="row" class="l">${esc(z.label)}</th><td>${z.made}/${z.att}</td><td class="main">${pct(z.pct, 1)}</td><td>${pct(z.league, 1)}</td>
-      <td class="${diff == null ? 'muted' : diff > 0.02 ? 'good' : diff < -0.02 ? 'bad' : ''}">${diff == null ? '–' : (diff > 0 ? '+' : '') + (diff * 100).toFixed(1)}</td><td class="hide-sm">${pct(z.share)}</td>
-      <td class="hide-sm">${z.pct == null ? '–' : (z.pct * z.value).toFixed(2)}</td></tr>`;
+    return `<tr><th scope="row" class="l">${esc(z.label)}</th><td>${z.made}/${z.att}</td><td class="main">${pct(z.pct, 1)}</td>
+      ${hasLeague ? `<td>${pct(z.league, 1)}</td><td class="${diff == null ? 'muted' : diff > 0.02 ? 'good' : diff < -0.02 ? 'bad' : ''}">${diff == null ? '–' : signed(diff * 100)}</td>` : ''}
+      <td class="hide-sm">${pct(z.att / shots.length)}</td><td class="hide-sm">${z.pct == null ? '–' : (z.pct * z.value).toFixed(2)}</td></tr>`;
   }).join('');
-  return `<div class="cols shotwrap">
-    <div class="chart court"><svg viewBox="-2 -2 504 394" role="img" aria-label="Shot chart: ${made} made of ${sh.shots.length} field-goal attempts in ${sh.games} games this season">${court}${dots}</svg>
-      <div class="legend"><span><i class="dot"></i>Made</span><span><b class="x">×</b> Missed</span><span>${made} of ${sh.shots.length} (${pct(made / sh.shots.length, 1)}) in ${sh.games} games</span></div></div>
-    <div><div class="scroll"><table class="t wrap-sm"><caption class="skip">Shooting by court zone against the league average</caption>
-      <thead><tr><th scope="col">Zone</th><th scope="col">Made</th><th scope="col">FG%</th><th scope="col">League</th><th scope="col">+/-</th><th scope="col" class="hide-sm"><abbr title="Share of the player's shots taken here">Share</abbr></th><th scope="col" class="hide-sm"><abbr title="Points per shot">PPS</abbr></th></tr></thead>
+  const coverage = !useBox || shots.length > attempted ? `${shots.length} attempts with recorded locations` : `${shots.length} of ${attempted} attempts have recorded locations`;
+  return `${summary}<div class="cols shotwrap">
+    <div class="chart court"><svg viewBox="-4 -4 508 478" role="img" aria-label="Shot chart with ${visible.length} attempts in the offensive half">${court}${dots}</svg>
+      <div class="legend"><span><i class="dot"></i>Made</span><span><b class="x">×</b> Missed</span></div></div>
+    <div><div class="scroll"><table class="t wrap-sm"><caption class="skip">Field-goal accuracy by court zone</caption>
+      <thead><tr><th scope="col">Zone</th><th scope="col">Made/Att</th><th scope="col">FG%</th>${hasLeague ? '<th scope="col">League</th><th scope="col">+/-</th>' : ''}
+      <th scope="col" class="hide-sm"><abbr title="Share of the displayed shot selection taken here">Share</abbr></th><th scope="col" class="hide-sm"><abbr title="Points per shot">PPS</abbr></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p class="muted small" style="margin-top:6px">This season's field-goal attempts (free throws excluded). +/- is percentage points against the league in that zone, shown from 8 attempts.</p></div>
+      <p class="shot-note muted small">${coverage}.${visible.length < shots.length ? ` ${shots.length - visible.length} outside the offensive half are included in the table.` : ''}
+      ${hasLeague ? 'The league comparison is in percentage points and appears from 8 attempts in a zone.' : ''}</p></div>
   </div>`;
 }
 
@@ -521,6 +552,10 @@ async function viewPlayer(id, token) {
   const p = await api('nba/player/' + id);
   if (token !== navToken) return;
   const a = p.averages, nx = p.next, line = nx && nx.line;
+  const headshot = p.headshot || (/^\d+$/.test(id) ? `https://a.espncdn.com/i/headshots/nba/players/full/${id}.png` : '');
+  const initials = (p.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('');
+  const trend = p.trend;
+  const seasonLabel = trend.season ? `${trend.season - 1}–${String(trend.season).slice(-2)}` : '';
   const bits = [p.team && p.team.name, p.pos, p.jersey && '#' + p.jersey, p.height, p.age && p.age + ' yrs'].filter(Boolean).map(esc).join(' · ');
   const avgRow = (label, r) => (r ? `<tr><th scope="row">${label}</th><td>${r.gp}</td><td>${f1(r.min)}</td>${STATS.map((k) => `<td>${f1(r[k])}</td>`).join('')}</tr>` : '');
   let nextHtml = '<p class="notice">No upcoming game in the next week for this player\'s team.</p>';
@@ -554,18 +589,32 @@ async function viewPlayer(id, token) {
   main.innerHTML = `
     <a class="crumb" href="#/nba/players">← Player projections</a>
     <div class="phead">
-      ${p.headshot ? `<img class="shot" src="${img(p.headshot, 240, 176)}" alt="" width="120" height="88">` : ''}
+      <div class="player-portrait"><span aria-hidden="true">${esc(initials)}</span>
+        ${headshot ? `<img id="player-photo" alt="${esc(p.name)}" width="184" height="135" decoding="async">` : ''}</div>
       <div><h1>${esc(p.name)}</h1><p class="muted" style="margin:4px 0 0">${bits}</p></div>
     </div>
     ${p.injury ? `<p class="notice"><b>${esc(p.injury.status)}</b>${p.injury.kind ? ` (${esc(p.injury.kind.toLowerCase())})` : ''}. ${esc(p.injury.comment || '')}</p>` : ''}
+    <section aria-labelledby="player-trend-title">
+      <h2 id="player-trend-title">Scoring trend</h2>
+      <div class="controls">
+        <label class="f">Statistic<select id="trend-stat">${STATS.map((k) => `<option value="${k}">${LONG[k]}</option>`).join('')}</select></label>
+        <label class="f">Recent games<select id="trend-games"><option value="5">Last 5</option><option value="10" selected>Last 10</option><option value="20">Last 20</option></select></label>
+        <span class="muted">${seasonLabel}</span>
+      </div>
+      <div class="chart" id="chart"></div>
+    </section>
+    <section aria-labelledby="player-shooting-title">
+      <h2 id="player-shooting-title">Shooting analysis</h2>
+      <div class="controls">
+        <label class="f">Shot type<select id="shot-type"><option value="0">All field goals</option><option value="2">Two-pointers</option><option value="3">Three-pointers</option></select></label>
+        <span class="muted">${seasonLabel}</span>
+      </div>
+      <div id="shot-chart">${shotChart(p.shooting, 0)}</div>
+    </section>
     <h2>Next game</h2>${nextHtml}
     <h2>Predicted against actual</h2>
-    <div class="controls"><div class="seg" role="group" aria-label="Stat to compare">${STATS.map((k, i) => `<button type="button" data-stat="${k}" aria-pressed="${i === 0}">${LABEL[k]}</button>`).join('')}</div></div>
+    <div class="controls"><div id="compare-stat" class="seg" role="group" aria-label="Stat to compare">${STATS.map((k, i) => `<button type="button" data-stat="${k}" aria-pressed="${i === 0}">${LABEL[k]}</button>`).join('')}</div></div>
     <div id="compare"></div>
-    <h3 style="margin:18px 0 8px">Last 20 games</h3>
-    <div class="chart" id="chart"></div>
-    <h2>Shot chart</h2>
-    ${shotChart(p.shooting)}
     <h2>Averages</h2>
     <div class="scroll"><table class="t"><thead><tr><th scope="col">Split</th><th scope="col">GP</th><th scope="col">MIN</th>${STATS.map((k) => `<th scope="col">${LABEL[k]}</th>`).join('')}</tr></thead>
       <tbody>${avgRow('This season', a.season)}${avgRow('Last 5', a.last5)}${avgRow('Last 10', a.last10)}${avgRow('Home', a.home)}${avgRow('Away', a.away)}${avgRow('Last season', a.previous)}${avgRow('Last playoffs', a.playoffs)}</tbody></table></div>
@@ -578,16 +627,30 @@ async function viewPlayer(id, token) {
         ${r.played ? `<td>${f1(r.min)}</td>${STATS.map((k) => `<td><span class="main">${r.stats[k]}</span>${r.proj ? `<span class="sub">${f1(r.proj[k])}</span>` : ''}</td>`).join('')}` : `<td class="l" colspan="${STATS.length + 1}">Did not play</td>`}
       </tr>`).join('') || '<tr><td class="l muted" colspan="10">No games on record.</td></tr>'}</tbody></table></div>
     <p class="muted small" style="margin-top:8px">Under each figure is what the model projected before that game (this season only).</p>`;
-  const drawChart = (k) => {
-    $('#chart').innerHTML = historyChart(p.log.filter((r) => r.season === p.season || !a.season), k, a.season ? a.season[k] : null);
-    $('#compare').innerHTML = compareBlock(p.compare || [], k);
+  const photo = $('#player-photo');
+  if (photo) {
+    photo.addEventListener('error', () => { photo.hidden = true; }, { once: true });
+    photo.src = img(headshot, 368, 270);
+  }
+  const trendStat = $('#trend-stat'), trendGames = $('#trend-games');
+  const drawTrend = () => {
+    const k = trendStat.value;
+    $('#chart').innerHTML = historyChart(trend.games, k, trend.average?.[k], Number(trendGames.value));
   };
-  drawChart('pts');
-  $('.seg').addEventListener('click', (e) => {
+  drawTrend();
+  trendStat.addEventListener('change', drawTrend);
+  trendGames.addEventListener('change', drawTrend);
+  $('#shot-type').addEventListener('change', (e) => {
+    $('#shot-chart').innerHTML = shotChart(p.shooting, Number(e.target.value));
+  });
+  const comparison = $('#compare-stat');
+  const drawComparison = (k) => { $('#compare').innerHTML = compareBlock(p.compare || [], k); };
+  drawComparison('pts');
+  comparison.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-stat]');
     if (!b) return;
-    $('.seg').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
-    drawChart(b.dataset.stat);
+    comparison.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    drawComparison(b.dataset.stat);
   });
   if (line) {
     const st = $('#c-stat'), ln = $('#c-line'), out = $('#c-out');
