@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import awards, db, nba_ingest, nba_model as M, soccer
+from . import awards, db, nba_ingest, nba_model as M, nba_trades, soccer
 from .service import NBAState, today_et
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -130,7 +130,7 @@ def nba() -> NBAState:
 def team_out(S: NBAState, tid: str) -> dict:
     t = S.teams.get(tid) or {}
     return {"id": tid, "abbr": t.get("abbr"), "name": t.get("name"), "short": t.get("short"),
-            "logo": t.get("logo"), "record": t.get("record")}
+            "logo": t.get("logo"), "color": t.get("color"), "record": t.get("record")}
 
 
 def line_out(S: NBAState, line: dict) -> dict:
@@ -348,6 +348,11 @@ def nba_awards():
     S = nba()
     return {"season": S.season, "played": S.awards["played"], "awards": S.awards["awards"],
             "names": dict(awards.AWARDS), "history": S.awards_history}
+
+
+@app.get("/api/nba/trades")
+def nba_trade_desk():
+    return nba_trades.trade_desk()
 
 
 @app.get("/api/nba/playoffs")

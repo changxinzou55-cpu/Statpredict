@@ -74,7 +74,7 @@ function hrefToApi(href) {
   if ((m = /^\/football\/match\/(\w+)/.exec(h))) return 'football/match/' + m[1];
   if ((m = /^\/football\?league=([\w.]+)/.exec(h))) return 'football/league/' + m[1];
   if ((m = /^\/nba\/(?:games|players)\?day=([\d-]+)/.exec(h))) return 'nba/day?day=' + m[1];
-  return { '/nba/teams': 'nba/teams', '/nba/playoffs': 'nba/playoffs', '/nba/accuracy': 'nba/accuracy', '/nba/awards': 'nba/awards', '/football': 'football/league/eng.1', '/nba/players': 'nba/players' }[h];
+  return { '/nba/teams': 'nba/teams', '/nba/playoffs': 'nba/playoffs', '/nba/accuracy': 'nba/accuracy', '/nba/awards': 'nba/awards', '/nba/trades': 'nba/trades', '/football': 'football/league/eng.1', '/nba/players': 'nba/players' }[h];
 }
 // Start loading a page as soon as the pointer or finger reaches its link.
 ['pointerover', 'touchstart', 'focusin'].forEach((ev) => document.addEventListener(ev, (e) => {
@@ -425,7 +425,9 @@ function historyChart(log, stat, seasonAvg, count) {
   const games = log.filter((r) => r.played && Number.isFinite(r.stats[stat])).slice(0, count).reverse();
   if (!games.length) return '<p class="muted">No completed games with this statistic.</p>';
   const narrow = window.innerWidth < 560;
-  const W = narrow ? 360 : 760, H = 232, L = 31, R = 18, T = 16, B = 30;
+  const L = 31, R = 18, T = 16, B = 30, H = 232;
+  const minWidth = L + R + 27 * (games.length - 1);
+  const W = narrow ? Math.max(360, minWidth) : 760;
   const peak = Math.max(4, seasonAvg ?? 0, ...games.map((r) => Math.max(r.stats[stat], r.proj?.[stat] ?? 0)));
   const step = peak >= 40 ? 10 : peak >= 15 ? 5 : peak >= 6 ? 2 : 1;
   const max = Math.ceil((peak + step / 2) / step) * step;
@@ -446,16 +448,17 @@ function historyChart(log, stat, seasonAvg, count) {
     return `<g>
       ${projected == null ? '' : `<line class="history-projection" x1="${cx - 4}" x2="${cx + 4}" y1="${y(projected)}" y2="${y(projected)}"/>`}
       <a href="#/nba/game/${esc(r.game_id)}" aria-label="${esc(caption)}"><title>${esc(caption)}</title>
-        <circle class="history-hit" cx="${cx}" cy="${y(value)}" r="9"/><circle class="history-point" cx="${cx}" cy="${y(value)}" r="3.5"/></a>
+        <circle class="history-hit" cx="${cx}" cy="${y(value)}" r="9"/><circle class="history-point" cx="${cx}" cy="${y(value)}" r="3.5"/>
+        <text class="history-value" x="${cx}" y="${y(value) - 9}" text-anchor="middle" aria-hidden="true">${value}</text></a>
       ${showDate ? `<text x="${cx}" y="${H - 7}" text-anchor="middle">${date}</text>` : ''}</g>`;
   }).join('');
   const latest = games[games.length - 1];
   const average = games.reduce((sum, r) => sum + r.stats[stat], 0) / games.length;
   return `<div class="history-summary"><div><strong>${f1(average)} ${LABEL[stat]}</strong><span class="muted"> per game over ${games.length} ${games.length === 1 ? 'game' : 'games'}</span></div>
     <span class="muted">Latest · ${esc(gameLabel(latest))} · <b>${latest.stats[stat]} ${LABEL[stat]}</b></span></div>
-    <svg viewBox="0 0 ${W} ${H}" role="group" aria-label="${LONG[stat]} by game">${grid}
+    <div class="history-scroll"><svg viewBox="0 0 ${W} ${H}" style="min-width:${minWidth}px" role="group" aria-label="${LONG[stat]} by game">${grid}
       ${seasonAvg == null ? '' : `<line class="avg" x1="${L}" x2="${W - R}" y1="${y(seasonAvg)}" y2="${y(seasonAvg)}"/>`}
-      ${games.length > 1 ? `<polyline class="history-line" points="${series}"/>` : ''}${points}</svg>
+      ${games.length > 1 ? `<polyline class="history-line" points="${series}"/>` : ''}${points}</svg></div>
     <div class="legend"><span><i></i>Actual</span>
       ${games.some((r) => r.proj?.[stat] != null) ? '<span><i class="history-projection-key"></i>Pre-game projection</span>' : ''}
       ${seasonAvg == null ? '' : `<span><i class="a"></i>Season average · ${f1(seasonAvg)}</span>`}</div>`;
@@ -556,6 +559,8 @@ async function viewPlayer(id, token) {
   const initials = (p.name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('');
   const trend = p.trend;
   const seasonLabel = trend.season ? `${trend.season - 1}–${String(trend.season).slice(-2)}` : '';
+  const team = p.team;
+  const teamColor = /^#?[0-9a-f]{6}$/i.test(team?.color) ? '#' + team.color.replace(/^#/, '') : '';
   const bits = [p.team && p.team.name, p.pos, p.jersey && '#' + p.jersey, p.height, p.age && p.age + ' yrs'].filter(Boolean).map(esc).join(' · ');
   const avgRow = (label, r) => (r ? `<tr><th scope="row">${label}</th><td>${r.gp}</td><td>${f1(r.min)}</td>${STATS.map((k) => `<td>${f1(r[k])}</td>`).join('')}</tr>` : '');
   let nextHtml = '<p class="notice">No upcoming game in the next week for this player\'s team.</p>';
@@ -588,10 +593,11 @@ async function viewPlayer(id, token) {
   }
   main.innerHTML = `
     <a class="crumb" href="#/nba/players">← Player projections</a>
-    <div class="phead">
+    <div class="phead" ${teamColor ? `style="--team-color:${teamColor}"` : ''}>
+      ${team?.logo ? `<img class="player-team-crest" src="${img(team.logo, 360)}" width="180" height="180" alt="">` : ''}
       <div class="player-portrait"><span aria-hidden="true">${esc(initials)}</span>
         ${headshot ? `<img id="player-photo" alt="${esc(p.name)}" width="184" height="135" decoding="async">` : ''}</div>
-      <div><h1>${esc(p.name)}</h1><p class="muted" style="margin:4px 0 0">${bits}</p></div>
+      <div class="player-identity"><h1>${esc(p.name)}</h1>${bits ? `<p>${bits}</p>` : ''}</div>
     </div>
     ${p.injury ? `<p class="notice"><b>${esc(p.injury.status)}</b>${p.injury.kind ? ` (${esc(p.injury.kind.toLowerCase())})` : ''}. ${esc(p.injury.comment || '')}</p>` : ''}
     <section aria-labelledby="player-trend-title">
@@ -632,6 +638,12 @@ async function viewPlayer(id, token) {
     photo.addEventListener('error', () => { photo.hidden = true; }, { once: true });
     photo.src = img(headshot, 368, 270);
   }
+  const crest = $('.player-team-crest', main);
+  if (crest) {
+    const hideCrest = () => { crest.hidden = true; };
+    crest.addEventListener('error', hideCrest, { once: true });
+    if (crest.complete && !crest.naturalWidth) hideCrest();
+  }
   const trendStat = $('#trend-stat'), trendGames = $('#trend-games');
   const drawTrend = () => {
     const k = trendStat.value;
@@ -665,6 +677,49 @@ async function viewPlayer(id, token) {
     ln.addEventListener('input', calc);
     reset();
   }
+}
+
+// ---------- NBA: trades ----------
+async function viewTrades(token) {
+  const desk = await api('nba/trades');
+  if (token !== navToken) return;
+  const sourceLink = (source) => `<a href="${esc(source.url)}" target="_blank" rel="noopener noreferrer">${esc(source.name)}</a>`;
+  const cards = (forecasts) => forecasts.map((f) => `
+    <article class="trade-card">
+      <div class="trade-card-head">
+        <div><h3><a href="#/nba/player/${esc(f.pid)}">${esc(f.name)}</a></h3><p class="muted">${esc(f.team)}</p></div>
+        <span class="trade-confidence">${esc(f.confidence)} confidence</span>
+      </div>
+      <dl class="trade-outlook">
+        <div><dt>What’s reported</dt><dd>${esc(f.reported)}</dd></div>
+        <div class="trade-pick"><dt>StatPredict forecast</dt><dd><strong>${esc(f.prediction)}</strong><p>${esc(f.reason)}</p></dd></div>
+      </dl>
+      <p class="muted small trade-meta">Issued <time datetime="${f.issued}">${dayFmt(f.issued, { month: 'short', day: 'numeric', year: 'numeric' })}</time>
+        · Through <time datetime="${f.through}">${dayFmt(f.through, { month: 'short', day: 'numeric', year: 'numeric' })}</time> · ${f.sources.map(sourceLink).join(' · ')}</p>
+    </article>`).join('');
+  const active = desk.forecasts.filter((f) => f.active);
+  const archive = desk.forecasts.filter((f) => !f.active);
+  const stories = desk.reports.map((r) => `
+    <li><p class="muted small">${esc(r.source)} · ${esc(r.kind)} · <time datetime="${esc(r.published)}">${shortDate(r.published)}</time></p>
+      <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a></li>`).join('');
+  main.innerHTML = `
+    <div class="schedule-head">
+      <div><h1>NBA Trade Desk</h1><p class="schedule-zone">Trade rumors, source reporting, and dated forecasts.</p></div>
+      <a href="https://www.nba.com/players/transactions" target="_blank" rel="noopener noreferrer">Official NBA transactions ↗</a>
+    </div>
+    <div class="trade-layout">
+      <section aria-labelledby="trade-forecasts">
+        <h2 id="trade-forecasts">Trade forecasts</h2>
+        ${active.length ? cards(active) : '<p class="muted">No active forecasts.</p>'}
+        ${archive.length ? `<details class="trade-archive"><summary>Past forecasts (${archive.length})</summary>${cards(archive)}</details>` : ''}
+      </section>
+      <section aria-labelledby="trade-rumors">
+        <h2 id="trade-rumors">Rumors &amp; reports</h2>
+        ${desk.unavailable_sources.length ? `<p class="notice">Could not refresh ${esc(desk.unavailable_sources.join(' and '))}.</p>` : ''}
+        ${stories ? `<ul class="trade-stories">${stories}</ul>` : '<p class="muted">No recent trade stories available.</p>'}
+        ${desk.checked_at ? `<p class="muted small trade-meta">Feeds checked ${dateTimeFmt(desk.checked_at)}</p>` : ''}
+      </section>
+    </div>`;
 }
 
 // ---------- NBA: teams ----------
@@ -953,6 +1008,7 @@ const routes = [
   [/^\/nba\/game\/(\w+)$/, (m, q, token) => viewGame(m[1], token), 'games', 'Game'],
   [/^\/nba\/players$/, (m, q, token) => viewPlayers(q, token), 'players', 'Player projections'],
   [/^\/nba\/player\/(\w+)$/, (m, q, token) => viewPlayer(m[1], token), 'players', 'Player'],
+  [/^\/nba\/trades$/, (m, q, token) => viewTrades(token), 'trades', 'Trades'],
   [/^\/nba\/teams$/, (m, q, token) => viewTeams(token), 'teams', 'Team ratings'],
   [/^\/nba\/playoffs$/, (m, q, token) => viewPlayoffs(token), 'playoffs', 'Playoffs'],
   [/^\/nba\/awards$/, (m, q, token) => viewAwards(token), 'awards', 'Awards'],

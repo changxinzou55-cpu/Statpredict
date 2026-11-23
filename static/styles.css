@@ -264,15 +264,29 @@ ul.plain { margin: 0; padding-left: 18px; }
 ul.plain li { margin: 2px 0; }
 
 /* player page */
-.phead { display: flex; gap: clamp(12px, 3vw, 24px); align-items: center; }
-.phead h1 { overflow-wrap: anywhere; }
+.phead {
+  --team-color: #405670;
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; gap: clamp(12px, 3vw, 24px); align-items: center;
+  padding: clamp(12px, 3vw, 24px); border-radius: 12px; color: #fff;
+  background: #1b2535;
+  background-image: linear-gradient(112deg, color-mix(in srgb, var(--team-color) 46%, #111a28), color-mix(in srgb, var(--team-color) 78%, #111a28));
+}
+.player-identity { min-width: 0; z-index: 1; text-shadow: 0 1px 4px #0a0c13; }
+.player-identity h1 { font-size: clamp(22px, 4.5vw, 39px); overflow-wrap: anywhere; }
+.player-identity p { margin: 4px 0 0; color: #fff; }
+.player-team-crest {
+  position: absolute; z-index: -1; right: clamp(-38px, 1vw, 20px); top: 50%;
+  width: clamp(135px, 31%, 280px); height: auto; transform: translateY(-50%);
+  opacity: 0.20; pointer-events: none;
+}
 .player-portrait {
   position: relative; display: grid; place-items: center; width: clamp(106px, 28vw, 184px);
   aspect-ratio: 184 / 135; flex: 0 0 auto; overflow: hidden;
-  border: 1px solid var(--border); border-radius: var(--radius); background: var(--fill);
-  color: var(--text-muted); font: 600 30px var(--font-display);
+  border: 1px solid #ffffff4d; border-radius: var(--radius); background: #ffffff1a;
+  color: #fff; font: 600 30px var(--font-display);
 }
-.player-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--bg); }
+.player-portrait img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--team-color, #405670); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin: 12px 0; }
 .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
 .tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
@@ -286,12 +300,37 @@ ul.plain li { margin: 2px 0; }
 .chart .history-line { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linejoin: round; }
 .chart .history-point { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .chart .history-hit { fill: transparent; }
+.history-scroll { overflow-x: auto; }
+.chart .history-value { fill: var(--text); stroke: var(--surface); stroke-width: 3px; paint-order: stroke; font-size: 11px; font-weight: 700; }
 .chart a:hover .history-point, .chart a:focus-visible .history-point { fill: var(--accent); }
 .chart .history-projection { stroke: var(--text-muted); stroke-width: 1.5; }
 .legend i.history-projection-key { border-top-color: var(--text-muted); }
 .history-summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
 .history-summary strong { font-size: 17px; }
 .shot-note { margin-top: 6px; }
+.trade-layout {
+  display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: clamp(16px, 4vw, 36px);
+}
+.trade-layout h2 { margin-top: 14px; }
+.trade-card, .trade-stories {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.trade-card { padding: clamp(12px, 3vw, 18px); margin-bottom: 10px; }
+.trade-card-head { display: flex; justify-content: space-between; align-items: start; gap: 8px 16px; flex-wrap: wrap; }
+.trade-card-head p { margin: 3px 0 0; }
+.trade-confidence { font-size: 12px; color: var(--text-muted); padding: 2px 8px; background: var(--fill); border-radius: 4px; }
+.trade-outlook { display: grid; gap: 12px; margin: 14px 0 0; }
+.trade-outlook dt { font-size: 12px; color: var(--text-muted); }
+.trade-outlook dd { margin: 2px 0 0; }
+.trade-outlook dd p { margin: 3px 0 0; }
+.trade-pick { border-left: 3px solid var(--accent); padding-left: 10px; }
+.trade-meta { margin: 10px 0 0; }
+.trade-archive summary { cursor: pointer; margin: 12px 0; }
+.trade-stories { list-style: none; margin: 0; padding: 0; }
+.trade-stories li { padding: 12px 14px; }
+.trade-stories li + li { border-top: 1px solid var(--border); }
+.trade-stories p { margin: 0 0 3px; }
+@media (max-width: 680px) { .trade-layout { grid-template-columns: minmax(0, 1fr); } }
 .chart .avg { stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 3; }
 .chart .grid { stroke: var(--border); stroke-width: 1; }
 .chart text { fill: var(--text-muted); font-size: 10px; font-family: var(--font); }
